@@ -50,7 +50,7 @@ fn setup_camera(mut commands: Commands) {
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Sprite::from_image(
-            asset_server.load("cave.png"),
+            asset_server.load("private/cave-blue.png"),
         ),
         Transform::from_xyz(0., 0., 0.)
     ));
@@ -80,7 +80,7 @@ fn update(
     //timer.0.tick(delta);
     let mut bouncer = bouncer_q.single_mut().unwrap();
     let mut transform = transform_q.single_mut().unwrap();
-    transform.scale = Vec3::splat(1.0 + bouncer.pos / 10.0);
+    transform.scale = Vec3::splat(0.4 + bouncer.pos / 10.0);
     bouncer.update(delta);
     println!("{}", bouncer.pos);
 }
