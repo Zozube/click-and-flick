@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use bevy::prelude::*;
+use bevy::audio::Volume;
 use core::time::Duration;
+use rand::seq::IndexedRandom;
 
 
 #[derive(Resource)]
@@ -10,6 +12,11 @@ struct MyTimer(Timer);
 struct Bouncer {
     spd: f32,
     pos: f32,
+}
+
+#[derive(Resource)]
+struct AudioSamples {
+    samples: Vec<Handle<AudioSource>>,
 }
 
 impl Bouncer {
@@ -38,7 +45,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .insert_resource(MyTimer(Timer::from_seconds(1.0, TimerMode::Once)))
-        .add_systems(Startup, (setup, setup_camera,))
+        .add_systems(Startup, (setup, setup_camera, load_punches))
         .add_systems(Update, (mouse_button_input, update))
         .run();
 }
@@ -57,16 +64,38 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Bouncer::default());
 }
 
+fn load_punches(
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
+    ) {
+    let samples: Vec<Handle<AudioSource>> = (1..=6)
+        .map(|i| asset_server.load(format!("private/non-commercial/punch/{}.ogg", i)))
+        .collect();
+
+    commands.insert_resource(AudioSamples { samples });
+}
+
 fn mouse_button_input(
     buttons: Res<ButtonInput<MouseButton>>,
     mut timer: ResMut<MyTimer>,
     mut bouncer_q: Query<&mut Bouncer>,
+    mut commands: Commands,
+    samples: Res<AudioSamples>,
 ) {
     let mut bouncer = bouncer_q.single_mut().unwrap();
     if buttons.just_pressed(MouseButton::Left) {
         println!("Mouse");
         timer.0.reset();
         bouncer.bounce();
+        let sample = samples.samples.choose(&mut rand::rng()).unwrap();
+        commands.spawn((
+            AudioPlayer::new(sample.clone()),
+            PlaybackSettings {
+                mode: bevy::audio::PlaybackMode::Despawn,
+                volume: Volume::Linear(1.0),
+                ..default()
+            },
+        ));
     }
 }
 
