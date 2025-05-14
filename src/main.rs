@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy::audio::Volume;
 use core::time::Duration;
 use rand::seq::IndexedRandom;
-
+use bevy::dev_tools::picking_debug::{DebugPickingMode, DebugPickingPlugin};
 
 #[derive(Resource)]
 struct MyTimer(Timer);
@@ -33,7 +33,6 @@ impl Bouncer {
 
         self.pos += self.spd * delta.as_secs_f32();
 
-
         if self.pos < 0.0 {
             self.pos = 0.0;
             self.spd = 0.0;
@@ -43,10 +42,27 @@ impl Bouncer {
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(bevy::log::LogPlugin {
+            filter: "bevy_dev_tools=trace".into(), // Show picking logs trace level and up
+            ..default()
+        }))
+        .add_plugins((MeshPickingPlugin, DebugPickingPlugin))
         .insert_resource(MyTimer(Timer::from_seconds(1.0, TimerMode::Once)))
         .add_systems(Startup, (setup, setup_camera, load_punches))
         .add_systems(Update, (mouse_button_input, update))
+         .add_systems(
+            PreUpdate,
+            (|mut mode: ResMut<DebugPickingMode>| {
+                *mode = match *mode {
+                    DebugPickingMode::Disabled => DebugPickingMode::Normal,
+                    DebugPickingMode::Normal => DebugPickingMode::Noisy,
+                    DebugPickingMode::Noisy => DebugPickingMode::Disabled,
+                }
+            })
+            .distributive_run_if(bevy::input::common_conditions::input_just_pressed(
+                KeyCode::F3,
+            )),
+         )
         .run();
 }
 
