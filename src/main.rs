@@ -3,6 +3,9 @@ use bevy::prelude::*;
 use bevy::audio::Volume;
 use core::time::Duration;
 use rand::seq::IndexedRandom;
+
+use bevy_egui::EguiPlugin;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy::dev_tools::picking_debug::{DebugPickingMode, DebugPickingPlugin};
 
 #[derive(Resource)]
@@ -33,6 +36,7 @@ impl Bouncer {
 
         self.pos += self.spd * delta.as_secs_f32();
 
+
         if self.pos < 0.0 {
             self.pos = 0.0;
             self.spd = 0.0;
@@ -47,10 +51,13 @@ fn main() {
             ..default()
         }))
         .add_plugins((MeshPickingPlugin, DebugPickingPlugin))
+        .add_plugins(EguiPlugin { enable_multipass_for_primary_context: true })
+        .add_plugins(WorldInspectorPlugin::new())
+        .insert_resource(MyTimer(Timer::from_seconds(1.0, TimerMode::Once)))
         .insert_resource(MyTimer(Timer::from_seconds(1.0, TimerMode::Once)))
         .add_systems(Startup, (setup, setup_camera, load_punches))
         .add_systems(Update, (mouse_button_input, update))
-         .add_systems(
+        .add_systems(
             PreUpdate,
             (|mut mode: ResMut<DebugPickingMode>| {
                 *mode = match *mode {
@@ -62,7 +69,7 @@ fn main() {
             .distributive_run_if(bevy::input::common_conditions::input_just_pressed(
                 KeyCode::F3,
             )),
-         )
+        )
         .run();
 }
 
@@ -100,7 +107,6 @@ fn mouse_button_input(
 ) {
     let mut bouncer = bouncer_q.single_mut().unwrap();
     if buttons.just_pressed(MouseButton::Left) {
-        println!("Mouse");
         timer.0.reset();
         bouncer.bounce();
         let sample = samples.samples.choose(&mut rand::rng()).unwrap();
@@ -127,5 +133,4 @@ fn update(
     let mut transform = transform_q.single_mut().unwrap();
     transform.scale = Vec3::splat(0.4 + bouncer.pos / 10.0);
     bouncer.update(delta);
-    println!("{}", bouncer.pos);
 }
