@@ -9,6 +9,11 @@ bevy_egui = "0.34.1"
 bevy-inspector-egui = "0.31.0"
 rand = "0.9.1"
 
+bevy_rand = "0.11.0"
+# https://docs.rs/bevy_rand/latest/bevy_rand/tutorial/ch01_choosing_prng/index.html#choosing-a-prng
+bevy_prng = { version = "0.11.0", features = ["wyrand"] }
+
+
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
 opt-level = 1
