@@ -2,19 +2,22 @@
 use bevy::gltf::GltfMesh;
 use bevy::render::view::RenderLayers;
 use bevy::{
-    color::palettes::basic::RED,
     audio::Volume,
+    color::palettes::basic::RED,
     pbr::{ExtendedMaterial, MaterialExtension, OpaqueRendererMethod},
-    scene::{SceneInstanceReady, SceneRoot},
     prelude::*,
     render::render_resource::*,
+    scene::{SceneInstanceReady, SceneRoot},
 };
+use bevy_prng::WyRand;
+use bevy_rand::prelude::{EntropyPlugin, GlobalEntropy};
 use core::time::Duration;
-use rand::seq::IndexedRandom;
+use rand::RngCore;
+use rand::{seq::SliceRandom, thread_rng};
 
+use bevy::dev_tools::picking_debug::{DebugPickingMode, DebugPickingPlugin};
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use bevy::dev_tools::picking_debug::{DebugPickingMode, DebugPickingPlugin};
 
 #[derive(Resource)]
 struct MyTimer(Timer);
@@ -60,12 +63,18 @@ fn main() {
             filter: "bevy_dev_tools=trace".into(), // Show picking logs trace level and up
             ..default()
         }))
+        .add_plugins(EntropyPlugin::<WyRand>::default())
         .add_plugins((MeshPickingPlugin, DebugPickingPlugin))
-        .add_plugins(EguiPlugin { enable_multipass_for_primary_context: true })
+        .add_plugins(EguiPlugin {
+            enable_multipass_for_primary_context: true,
+        })
         .add_plugins(WorldInspectorPlugin::new())
         .insert_resource(MyTimer(Timer::from_seconds(1.0, TimerMode::Once)))
         .add_systems(Startup, (setup, setup_camera, load_punches, spawn_gltf))
-        .add_systems(Update, (mouse_button_input, update, rotate_coin))
+        .add_systems(
+            Update,
+            (mouse_button_input, update, rotate_coin, print_random_value),
+        )
         .add_systems(
             PreUpdate,
             (|mut mode: ResMut<DebugPickingMode>| {
@@ -156,7 +165,7 @@ fn spawn_gltf(
             mesh: 0,
             primitive: 0,
         }
-        .from_asset("private/coin.glb")
+        .from_asset("private/coin.glb"),
     );
 
     let new_mat = StandardMaterial {
@@ -178,7 +187,6 @@ fn spawn_gltf(
         MeshMaterial3d(materials.add(new_mat)),
         Transform::from_xyz(0., 0., -3.).looking_at(Vec3::ZERO, Vec3::X),
         RenderLayers::layer(0),
-
         //Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.))),
     ));
 }
@@ -194,7 +202,7 @@ fn mouse_button_input(
     if buttons.just_pressed(MouseButton::Left) {
         timer.0.reset();
         bouncer.bounce();
-        let sample = samples.samples.choose(&mut rand::rng()).unwrap();
+        let sample = samples.samples.choose(&mut thread_rng()).unwrap();
         commands.spawn((
             AudioPlayer::new(sample.clone()),
             PlaybackSettings {
@@ -226,4 +234,11 @@ fn rotate_coin(time: Res<Time>, mut transform_q: Query<&mut Transform, With<Coin
 
     let mut coin_t = transform_q.single_mut().unwrap();
     coin_t.rotate_y(delta.as_secs_f32() * 4.);
+}
+
+// Sub-optimal and non-deterministic
+// Use of `GlobalEnthropy` leads to sequenced flow,
+// https://docs.rs/bevy_rand/latest/bevy_rand/tutorial/ch03_components_forking/index.html
+fn print_random_value(mut rng: GlobalEntropy<WyRand>) {
+    println!("Random value {} ", rng.next_u32());
 }
