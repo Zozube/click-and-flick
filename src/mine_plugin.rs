@@ -3,7 +3,7 @@ use crate::states::GameState;
 use bevy::render::view::RenderLayers;
 use bevy::{audio::Volume, pbr::OpaqueRendererMethod, prelude::*};
 use core::time::Duration;
-use rand::seq::IndexedRandom;
+use rand::{seq::SliceRandom, thread_rng};
 
 #[derive(Component)]
 struct Coin {}
@@ -164,7 +164,7 @@ fn mouse_button_input(
     let mut bouncer = bouncer_q.single_mut().unwrap();
     if buttons.just_pressed(MouseButton::Left) {
         bouncer.bounce();
-        let sample = samples.samples.choose(&mut rand::rng()).unwrap();
+        let sample = samples.samples.choose(&mut thread_rng()).unwrap();
         commands.spawn((
             AudioPlayer::new(sample.clone()),
             PlaybackSettings {
