@@ -13,6 +13,9 @@ struct AudioSamples {
     samples: Vec<Handle<AudioSource>>,
 }
 
+#[derive(Resource)]
+struct Ambient(Handle<AudioSource>);
+
 #[derive(Component, Default)]
 pub struct Bouncer {
     spd: f32,
@@ -46,7 +49,7 @@ impl Plugin for MinePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             OnEnter(GameState::Mine),
-            (setup, setup_camera, load_punches, spawn_gltf),
+            (load_audio, (setup, setup_camera, spawn_gltf)).chain(),
         )
         .add_systems(
             Update,
@@ -75,20 +78,31 @@ fn setup_camera(mut commands: Commands) {
     ));
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Ambient>) {
     commands.spawn((
         Sprite::from_image(asset_server.load("private/cave-blue.png")),
         Transform::from_xyz(0., 0., 1.),
         RenderLayers::layer(1),
     ));
     commands.spawn(Bouncer::default());
+    commands.spawn((
+        AudioPlayer::new(sample.0.clone()),
+        PlaybackSettings {
+            mode: bevy::audio::PlaybackMode::Loop,
+            volume: Volume::Linear(0.75),
+            ..default()
+        },
+    ));
 }
 
-fn load_punches(asset_server: Res<AssetServer>, mut commands: Commands) {
+fn load_audio(asset_server: Res<AssetServer>, mut commands: Commands) {
     let samples: Vec<Handle<AudioSource>> = (1..=6)
         .map(|i| asset_server.load(format!("private/non-commercial/punch/{}.ogg", i)))
         .collect();
 
+    commands.insert_resource(Ambient(
+        asset_server.load("private/non-commercial/ambient/music.ogg"),
+    ));
     commands.insert_resource(AudioSamples { samples });
 }
 
