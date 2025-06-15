@@ -12,7 +12,7 @@ use bevy::dev_tools::picking_debug::{DebugPickingMode, DebugPickingPlugin};
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
-use crate::mine_plugin::{MinePlugin, BackgroundImg};
+use crate::mine_plugin::{BackgroundImg, MinePlugin};
 use crate::states::{AppState, GameState};
 
 #[derive(Resource, Debug, Clone)]
@@ -157,9 +157,9 @@ fn upd_letterbox(
         camera.viewport = Some(lb.viewport.clone());
     }
 
-    for mut bg in backgrounds.iter_mut() {
-        bg.custom_size = Some(lb.viewport.physical_size.as_vec2());
-    }
+    //for mut bg in backgrounds.iter_mut() {
+    //    bg.custom_size = Some(lb.viewport.physical_size.as_vec2());
+    //}
 }
 
 fn gizmos(mut gizmo: Gizmos, windows: Query<&Window, With<PrimaryWindow>>, lb_res: Res<Letterbox>) {

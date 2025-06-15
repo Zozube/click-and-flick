@@ -1,6 +1,8 @@
 use crate::states::GameState;
 
+use bevy::render::Render;
 use bevy::render::view::RenderLayers;
+use bevy::window::PrimaryWindow;
 use bevy::{audio::Volume, pbr::OpaqueRendererMethod, prelude::*};
 use core::time::Duration;
 use rand::{seq::SliceRandom, thread_rng};
@@ -10,6 +12,9 @@ struct Coin {}
 
 #[derive(Component)]
 pub struct BackgroundImg;
+
+#[derive(Component)]
+pub struct Rock;
 
 #[derive(Resource)]
 struct AudioSamples {
@@ -69,6 +74,14 @@ fn setup_camera(mut commands: Commands) {
             ..default()
         },
         RenderLayers::layer(1),
+        Projection::Orthographic(OrthographicProjection {
+            //viewport_origin: Vec2::ZERO,
+            scaling_mode: bevy::render::camera::ScalingMode::Fixed {
+                width: 1920.,
+                height: 1080.,
+            },
+            ..OrthographicProjection::default_2d()
+        }),
     ));
     commands.spawn((
         Camera3d::default(),
@@ -86,14 +99,58 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
     commands.spawn((
         Sprite {
             image: bg,
-            image_mode: SpriteImageMode::Scale(ScalingMode::FillStart),
+            //image_mode: SpriteImageMode::Scale(ScalingMode::FillStart),
+            custom_size: Some(Vec2::new(1920., 1080.)),
             ..default()
         },
         Transform::from_xyz(0., 0., 1.),
         RenderLayers::layer(1),
         BackgroundImg,
     ));
-    commands.spawn(Bouncer::default());
+
+    let rock_layers: [Handle<Image>; 4] = (0..=3)
+        .map(|i| asset_server.load(format!("private/rock-layer{}.png", i)))
+        .collect::<Vec<_>>()
+        .try_into()
+        .expect("Expectd exactly 4 rock layers");
+
+    let [rock1, rock2, rock3, rock4] = rock_layers;
+
+    commands.spawn((
+        Sprite::from_image(rock1),
+        Transform::from_xyz(120., 50., 1.).with_scale(Vec3::splat(0.75)),
+        RenderLayers::layer(1),
+        Rock,
+        Bouncer::default(),
+    ));
+
+    commands.spawn((
+        Sprite::from_image(rock2),
+        Transform::from_xyz(100., -50., 1.).with_scale(Vec3::splat(0.75)),
+        RenderLayers::layer(1),
+        Rock,
+        Bouncer::default(),
+    ));
+
+    commands.spawn((
+        Sprite::from_image(rock3),
+        Transform::from_xyz(-150., 0., 1.1).with_scale(Vec3::splat(0.75)),
+        RenderLayers::layer(1),
+        Rock,
+        Bouncer::default(),
+    ));
+
+    commands.spawn((
+        Sprite {
+            image: rock4,
+            anchor: bevy::sprite::Anchor::TopLeft,
+            ..default()
+        },
+        Transform::from_xyz(-1920. / 2., 1080. / 2., 1.).with_scale(Vec3::splat(0.75)),
+        RenderLayers::layer(1),
+        Rock,
+        Bouncer::default(),
+    ));
     commands.spawn((
         AudioPlayer::new(sample.0.clone()),
         PlaybackSettings {
@@ -180,13 +237,52 @@ fn spawn_gltf(
 
 fn mouse_button_input(
     buttons: Res<ButtonInput<MouseButton>>,
-    mut bouncer_q: Query<&mut Bouncer>,
+    q_window: Query<&Window, With<PrimaryWindow>>,
+    q_camera: Query<(&Camera, &GlobalTransform), (With<Camera2d>, With<RenderLayers>)>,
+    //mut bouncer_q: Query<&mut Bouncer>,
     mut commands: Commands,
+    q_rocks: Query<(&Transform, &Sprite, &mut Bouncer), With<Rock>>,
+    images: Res<Assets<Image>>,
     samples: Res<AudioSamples>,
 ) {
-    let mut bouncer = bouncer_q.single_mut().unwrap();
+    //let mut bouncer = bouncer_q.single_mut().unwrap();
     if buttons.just_pressed(MouseButton::Left) {
-        bouncer.bounce();
+        let window = q_window.single().expect("Window must exist");
+        let (camera, camera_transform) = q_camera.single().expect("More than one camera");
+
+        if let Some(cursor) = window.cursor_position() {
+            match camera.viewport_to_world(camera_transform, cursor) {
+                Ok(ray) => {
+                    let world_position = ray.origin.truncate();
+                    for (transform, sprite, mut bouncer) in q_rocks {
+                        let texture = images.get(sprite.image.id()).unwrap();
+                        let texture_size = texture.size();
+                        let scale = transform.scale.truncate();
+                        let size = texture_size.as_vec2() * scale;
+                        let half_size = size * 0.5 * scale;
+                        let pos = transform.translation.truncate();
+
+                        let min = pos - half_size;
+                        let max = pos + half_size;
+
+                        println!("{:?}", size);
+
+                        if (world_position.x >= min.x && world_position.x <= max.x)
+                            && (world_position.y >= min.y && world_position.y <= max.y)
+                        {
+                            bouncer.bounce();
+                            println!("Cursor over sprite at {:?}", transform.translation);
+                        }
+                    }
+                    println!("World coords: {}/{}", world_position.x, world_position.y);
+                }
+                Err(err) => {
+                    eprintln!("Error converting cursor to world ray: {:?}", err);
+                }
+            }
+        }
+
+        //bouncer.bounce();
         let sample = samples.samples.choose(&mut thread_rng()).unwrap();
         commands.spawn((
             AudioPlayer::new(sample.clone()),
@@ -199,17 +295,14 @@ fn mouse_button_input(
     }
 }
 
-fn update(
-    time: Res<Time>,
-    mut bouncer_q: Query<&mut Bouncer>,
-    mut transform_q: Query<&mut Transform, With<Sprite>>,
-) {
+fn update(time: Res<Time>, mut q_rocks: Query<(&mut Transform, &mut Bouncer), With<Rock>>) {
     let delta = time.delta();
-    //timer.0.tick(delta);
-    let mut bouncer = bouncer_q.single_mut().unwrap();
-    let mut transform = transform_q.single_mut().unwrap();
-    //transform.scale = Vec3::splat(0.4 + bouncer.pos / 10.0);
-    bouncer.update(delta);
+
+    for (mut transform, mut bouncer) in q_rocks.iter_mut() {
+        bouncer.update(delta);
+        transform.scale = Vec3::splat(1.0 + bouncer.pos / 10.0);
+    }
+
     //println!("{}", bouncer.pos);
 }
 
