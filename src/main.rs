@@ -3,16 +3,19 @@ mod main_menu;
 mod mine_plugin;
 mod states;
 
+use avian3d::prelude::*;
 use bevy::math::AspectRatio;
 use bevy::prelude::*;
-use bevy::window::{PrimaryWindow, WindowResized};
+use bevy::render::view::RenderLayers;
+use bevy_simple_screen_boxing::CameraBox;
+use bevy_simple_screen_boxing::CameraBoxingPlugin;
 use std::error::Error;
 
 use bevy::dev_tools::picking_debug::{DebugPickingMode, DebugPickingPlugin};
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
-use crate::mine_plugin::{BackgroundImg, MinePlugin};
+use crate::mine_plugin::MinePlugin;
 use crate::states::{AppState, GameState};
 
 #[derive(Resource, Debug, Clone)]
@@ -24,10 +27,16 @@ pub struct Letterbox {
 fn main() {
     App::new()
         // Plugins
-        .add_plugins(DefaultPlugins.set(bevy::log::LogPlugin {
-            filter: "bevy_dev_tools=trace".into(), // Show picking logs trace level and up
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(bevy::log::LogPlugin {
+                    filter: "bevy_dev_tools=trace".into(), // Show picking logs trace level and up
+                    ..default()
+                })
+                .set(ImagePlugin::default_nearest()),
+        )
+        .add_plugins(PhysicsPlugins::default())
+        .add_plugins(CameraBoxingPlugin)
         .add_plugins((MeshPickingPlugin, DebugPickingPlugin))
         .add_plugins(EguiPlugin {
             enable_multipass_for_primary_context: true,
@@ -57,24 +66,54 @@ fn main() {
         })
         .add_systems(
             Update,
-            (gizmos, upd_letterbox.run_if(on_event::<WindowResized>)),
+            (
+                gizmos, boxes, /*upd_letterbox.run_if(on_event::<WindowResized>)*/
+            ),
         )
-        .add_systems(Startup, (upd_letterbox, setup))
+        .add_systems(Startup, (/*upd_letterbox, */setup))
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Camera2d,
         Camera {
-            order: 99,
+            order: 0,
             ..default()
         },
-        //Projection::Orthographic(OrthographicProjection {
-        //    viewport_origin: Vec2::ZERO,
-        //    ..OrthographicProjection::default_2d()
-        //}),
+        CameraBox::ResolutionIntegerScale {
+            resolution: Vec2::new(1920., 1080.),
+            allow_imperfect_aspect_ratios: true,
+        },
+        RenderLayers::layer(0),
+        Projection::Orthographic(OrthographicProjection {
+            //viewport_origin: Vec2::ZERO,
+            scaling_mode: bevy::render::camera::ScalingMode::Fixed {
+                width: 1920.,
+                height: 1080.,
+            },
+            ..OrthographicProjection::default_2d()
+        }),
     ));
+
+    commands.spawn((
+        Camera3d::default(),
+        Camera {
+            order: 1,
+            ..default()
+        },
+        CameraBox::ResolutionIntegerScale {
+            resolution: Vec2::new(1920., 1080.),
+            allow_imperfect_aspect_ratios: true,
+        },
+        Transform::from_xyz(0., 0., 10.0).looking_at(Vec3::ZERO, Vec3::Y),
+        RenderLayers::layer(1),
+    ));
+
+    //commands.spawn((
+    //    Sprite::from_image(asset_server.load("private/rock-layer0.png")),
+    //    Transform::from_xyz(-200., 0., 100.).with_scale(Vec3::splat(0.33)),
+    //));
 }
 
 fn parse_aspect_ratio(ratio: &str) -> Result<AspectRatio, Box<dyn Error>> {
@@ -146,7 +185,6 @@ fn upd_letterbox(
     windows: Query<&Window>,
     mut letterbox: ResMut<Letterbox>,
     mut cameras: Query<&mut Camera>,
-    mut backgrounds: Query<&mut Sprite, With<BackgroundImg>>,
 ) {
     let window = windows.single().expect("Multiple windows present");
     let lb = calculate_letterbox(window);
@@ -155,6 +193,7 @@ fn upd_letterbox(
 
     for mut camera in cameras.iter_mut() {
         camera.viewport = Some(lb.viewport.clone());
+        //println!("{:?}", camera)
     }
 
     //for mut bg in backgrounds.iter_mut() {
@@ -162,23 +201,41 @@ fn upd_letterbox(
     //}
 }
 
-fn gizmos(mut gizmo: Gizmos, windows: Query<&Window, With<PrimaryWindow>>, lb_res: Res<Letterbox>) {
-    let window = windows.single().expect("Multiple windows present");
-    let ww = window.width();
-    let wh = window.height();
-    let lb = lb_res;
+fn boxes(mut gizmo: Gizmos, q_sprite: Query<(&Sprite, &Transform)>, images: Res<Assets<Image>>) {
+    for (sprite, transform) in q_sprite.iter() {
+        if let Some(texture) = images.get(sprite.image.id()) {
+            let texture_size = texture.size();
+            let scale = transform.scale.truncate();
+            let size = texture_size.as_vec2() * scale;
+            //println!("{:?}", size);
+            let half_size = size * 0.5;
+            let pos = transform.translation.truncate();
 
-    let size = Vec2 {
-        x: ww * lb.region.max.x,
-        y: wh * lb.region.max.y,
-    };
+            let min = pos - half_size;
+            let max = pos + half_size;
 
-    gizmo.rect_2d(Isometry2d::IDENTITY, size, Color::linear_rgb(1., 1., 0.));
+            gizmo.cross_2d((min + max) / 2., 12., Color::linear_rgb(1., 1., 1.));
+            gizmo.cross_2d(min, 12., Color::linear_rgb(0., 1., 1.));
+            gizmo.cross_2d(max, 12., Color::linear_rgb(0., 1., 1.));
+            gizmo.rect_2d(
+                Isometry2d::from_translation((max + min) / 2.),
+                max - min,
+                Color::linear_rgb(1., 0., 1.),
+            );
+        }
+    }
+}
 
-    gizmo.line_2d(size / 2., -size / 2., Color::linear_rgb(1., 1., 0.));
-    gizmo.line_2d(
-        Vec2 { x: -size.x, ..size } / 2.,
-        Vec2 { y: -size.y, ..size } / 2.,
-        Color::linear_rgb(1., 1., 0.),
-    );
+fn gizmos(mut gizmo: Gizmos, q_projection: Query<&Projection, With<Camera2d>>) {
+    let projetcion = q_projection.single().unwrap();
+    if let Projection::Orthographic(p) = projetcion {
+        let size = p.area.max - p.area.min;
+        gizmo.rect_2d(Isometry2d::IDENTITY, size, Color::linear_rgb(1., 1., 0.));
+        gizmo.line_2d(size / 2., -size / 2., Color::linear_rgb(1., 1., 0.));
+        gizmo.line_2d(
+            Vec2 { x: -size.x, ..size } / 2.,
+            Vec2 { y: -size.y, ..size } / 2.,
+            Color::linear_rgb(1., 1., 0.),
+        );
+    }
 }
