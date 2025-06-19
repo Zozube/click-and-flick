@@ -53,6 +53,9 @@ struct AudioSamples {
 #[derive(Resource)]
 struct Ambient(Handle<AudioSource>);
 
+#[derive(Resource)]
+struct MoneySpill(Handle<AudioSource>);
+
 #[derive(Component, Default)]
 pub struct Bouncer {
     spd: f32,
@@ -214,6 +217,7 @@ fn load_audio(asset_server: Res<AssetServer>, mut commands: Commands) {
     commands.insert_resource(Ambient(
         asset_server.load("private/non-commercial/ambient/music.ogg"),
     ));
+    commands.insert_resource(MoneySpill(asset_server.load("private/money-spill-2.ogg")));
     commands.insert_resource(AudioSamples { samples });
 }
 
@@ -346,6 +350,7 @@ fn mouse_button_input(
                                     },
                                 ));
                                 println!("Cursor over sprite at {:?}", transform.translation);
+                                return;
                             }
                             println!("World coords: {}/{}", world_position.x, world_position.y);
                         }
@@ -379,6 +384,7 @@ fn clean_dead(
     q: Query<(Entity, &Health, &Transform)>,
     asset_server: Res<AssetServer>,
     materials: Res<MyMaterials>,
+    money_spill: Res<MoneySpill>,
 ) {
     for (entity, hp, tr) in q.iter() {
         if hp.0 < 0. {
@@ -388,6 +394,14 @@ fn clean_dead(
                 &materials,
                 tr.translation.truncate(),
             );
+            commands.spawn((
+                AudioPlayer::new(money_spill.0.clone()),
+                PlaybackSettings {
+                    mode: bevy::audio::PlaybackMode::Despawn,
+                    volume: Volume::Linear(0.75),
+                    ..default()
+                },
+            ));
             commands.entity(entity).despawn();
         }
     }
