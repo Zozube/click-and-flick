@@ -1,4 +1,4 @@
-use crate::states::GameState;
+use crate::states::{GameLogic, GameState};
 
 use avian3d::prelude::*;
 use bevy::asset::AssetPath;
@@ -9,6 +9,9 @@ use core::time::Duration;
 use rand::Rng;
 use rand::{seq::SliceRandom, thread_rng};
 use std::ops::{Deref, DerefMut};
+
+#[derive(Component)]
+struct MineSceneTag;
 
 #[derive(Component)]
 struct Coin {}
@@ -107,11 +110,11 @@ impl Plugin for MinePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             OnEnter(GameState::Mine),
-            (load_audio, (setup, setup_camera, spawn_gltf)).chain(),
+            (load_audio, (setup, setup_camera, load_gltf)).chain(),
         )
         .add_systems(
             Update,
-            (mouse_button_input, update, clean_dead).run_if(in_state(GameState::Mine)),
+            (mouse_button_input, update, clean_dead).in_set(GameLogic),
         );
     }
 }
@@ -155,6 +158,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
         },
         Transform::from_xyz(0., 0., 1.),
         BackgroundImg,
+        MineSceneTag,
     ));
 
     let rock_layers: [Handle<Image>; 4] = (0..=3)
@@ -170,6 +174,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
         OriginalTransform(Transform::from_xyz(120., 50., 1.).with_scale(Vec3::splat(0.75))),
         Rock,
         Bouncer::default(),
+        MineSceneTag,
     ));
 
     commands.spawn((
@@ -177,6 +182,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
         OriginalTransform(Transform::from_xyz(100., -50., 1.).with_scale(Vec3::splat(0.75))),
         Rock,
         Bouncer::default(),
+        MineSceneTag,
     ));
 
     commands.spawn((
@@ -184,6 +190,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
         OriginalTransform(Transform::from_xyz(-150., 0., 1.1).with_scale(Vec3::splat(0.75))),
         Rock,
         Bouncer::default(),
+        MineSceneTag,
     ));
 
     commands.spawn((
@@ -197,6 +204,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
         ),
         Rock,
         Bouncer::default(),
+        MineSceneTag,
     ));
 
     commands.spawn((
@@ -206,6 +214,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
             volume: Volume::Linear(0.75),
             ..default()
         },
+        MineSceneTag,
     ));
 }
 
@@ -221,7 +230,7 @@ fn load_audio(asset_server: Res<AssetServer>, mut commands: Commands) {
     commands.insert_resource(AudioSamples { samples });
 }
 
-fn spawn_gltf(
+fn load_gltf(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -237,6 +246,7 @@ fn spawn_gltf(
             ..default()
         },
         RenderLayers::layer(1),
+        MineSceneTag,
     ));
     commands.spawn((
         DirectionalLight {
@@ -249,6 +259,7 @@ fn spawn_gltf(
             ..default()
         },
         RenderLayers::layer(1),
+        MineSceneTag,
     ));
 
     //let obj: Handle<Mesh> = asset_server.load("private/coin.obj");
@@ -298,6 +309,7 @@ fn spawn_coins(
                 Transform::from_translation((at / 20.).extend(-20. + x as f32 + y as f32))
                     .looking_at(Vec3::ZERO, Vec3::X),
                 RenderLayers::layer(1),
+                MineSceneTag,
             ));
         }
     }
@@ -348,6 +360,7 @@ fn mouse_button_input(
                                         volume: Volume::Linear(1.0),
                                         ..default()
                                     },
+                                    MineSceneTag,
                                 ));
                                 println!("Cursor over sprite at {:?}", transform.translation);
                                 return;
@@ -401,6 +414,7 @@ fn clean_dead(
                     volume: Volume::Linear(0.75),
                     ..default()
                 },
+                MineSceneTag,
             ));
             commands.entity(entity).despawn();
         }

@@ -13,6 +13,7 @@ bevy_rand = "0.11.0"
 bevy_prng = { version = "0.11.0", features = ["wyrand"] }
 bevy_simple_screen_boxing = "0.1.0"
 avian3d = "0.3"
+bevy_pancam = { version = "0.18.0", features = ["bevy_egui"] }
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]

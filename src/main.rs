@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod main_menu;
+mod map;
 mod mine_plugin;
 mod states;
 
@@ -7,14 +8,17 @@ use avian3d::prelude::*;
 use bevy::math::AspectRatio;
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
+use bevy_pancam::PanCamPlugin;
 use bevy_simple_screen_boxing::CameraBox;
 use bevy_simple_screen_boxing::CameraBoxingPlugin;
+use states::GameLogic;
 use std::error::Error;
 
 use bevy::dev_tools::picking_debug::{DebugPickingMode, DebugPickingPlugin};
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
+use crate::map::MapPlugin;
 use crate::mine_plugin::MinePlugin;
 use crate::states::{AppState, GameState};
 
@@ -35,6 +39,9 @@ fn main() {
                 })
                 .set(ImagePlugin::default_nearest()),
         )
+        .configure_sets(Update, GameLogic)
+        //.configure_sets(Startup, GameLogic)
+        .add_plugins(PanCamPlugin::default())
         .add_plugins(PhysicsPlugins::default())
         .add_plugins(CameraBoxingPlugin)
         .add_plugins((MeshPickingPlugin, DebugPickingPlugin))
@@ -43,7 +50,9 @@ fn main() {
         })
         .add_plugins(WorldInspectorPlugin::new())
         .insert_resource(ClearColor(Color::BLACK))
-        .add_plugins(MinePlugin)
+        //.add_plugins(MinePlugin)
+        .add_plugins(MapPlugin)
+        .configure_sets(Update, GameLogic.run_if(in_state(GameState::Mine)))
         .add_systems(
             PreUpdate,
             (|mut mode: ResMut<DebugPickingMode>| {
@@ -57,6 +66,20 @@ fn main() {
                 KeyCode::F3,
             )),
         )
+        .add_systems(
+            PreUpdate,
+            (|state: Res<State<GameState>>, mut next_state: ResMut<NextState<GameState>>| {
+                let new_state = match state.get() {
+                    GameState::Mine => GameState::Map,
+                    GameState::Map => GameState::Tavern,
+                    GameState::Tavern => GameState::Mine,
+                };
+                next_state.set(new_state);
+            })
+            .distributive_run_if(bevy::input::common_conditions::input_just_pressed(
+                KeyCode::Tab,
+            )),
+        )
         // States
         .init_state::<GameState>()
         .init_state::<AppState>()
@@ -67,7 +90,7 @@ fn main() {
         .add_systems(
             Update,
             (
-                gizmos, boxes, /*upd_letterbox.run_if(on_event::<WindowResized>)*/
+                /* gizmos, */ boxes, /*upd_letterbox.run_if(on_event::<WindowResized>)*/
             ),
         )
         .add_systems(Startup, (/*upd_letterbox, */setup))
@@ -75,26 +98,26 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn((
-        Camera2d,
-        Camera {
-            order: 0,
-            ..default()
-        },
-        CameraBox::ResolutionIntegerScale {
-            resolution: Vec2::new(1920., 1080.),
-            allow_imperfect_aspect_ratios: true,
-        },
-        RenderLayers::layer(0),
-        Projection::Orthographic(OrthographicProjection {
-            //viewport_origin: Vec2::ZERO,
-            scaling_mode: bevy::render::camera::ScalingMode::Fixed {
-                width: 1920.,
-                height: 1080.,
-            },
-            ..OrthographicProjection::default_2d()
-        }),
-    ));
+    //commands.spawn((
+    //    Camera2d,
+    //    Camera {
+    //        order: 0,
+    //        ..default()
+    //    },
+    //    CameraBox::ResolutionIntegerScale {
+    //        resolution: Vec2::new(1920., 1080.),
+    //        allow_imperfect_aspect_ratios: true,
+    //    },
+    //    RenderLayers::layer(0),
+    //    Projection::Orthographic(OrthographicProjection {
+    //        //viewport_origin: Vec2::ZERO,
+    //        scaling_mode: bevy::render::camera::ScalingMode::Fixed {
+    //            width: 1920.,
+    //            height: 1080.,
+    //        },
+    //        ..OrthographicProjection::default_2d()
+    //    }),
+    //));
 
     commands.spawn((
         Camera3d::default(),
@@ -227,7 +250,11 @@ fn boxes(mut gizmo: Gizmos, q_sprite: Query<(&Sprite, &Transform)>, images: Res<
 }
 
 fn gizmos(mut gizmo: Gizmos, q_projection: Query<&Projection, With<Camera2d>>) {
-    let projetcion = q_projection.single().unwrap();
+    let projetcion = match q_projection.single() {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+
     if let Projection::Orthographic(p) = projetcion {
         let size = p.area.max - p.area.min;
         gizmo.rect_2d(Isometry2d::IDENTITY, size, Color::linear_rgb(1., 1., 0.));

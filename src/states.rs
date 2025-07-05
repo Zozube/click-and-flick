@@ -26,3 +26,7 @@ impl Default for GameState {
         GameState::Mine
     }
 }
+
+// Very minimally implemented. Allow running systems separately and follow DIP
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GameLogic;
