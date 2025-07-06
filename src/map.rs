@@ -106,7 +106,6 @@ fn setup(
     let mat2 = materials.add(Color::linear_rgba(0.75, 0.75, 0.75, 0.85));
 
     for point in points {
-        println!("{:?}", point);
         let mesh = meshes.add(Rhombus::new(15., 15.));
         commands.spawn((
             Mesh2d(mesh),
@@ -120,23 +119,27 @@ fn setup(
         let size = rect.max - rect.min;
         let mesh = meshes.add(Rectangle::from_size(size));
         let mid = rect.min.midpoint(rect.max);
-        commands.spawn((
-            Mesh2d(mesh),
-            MeshMaterial2d(mat.clone()),
-            Transform::from_xyz(mid.x, mid.y, 20.),
-        ));
+        commands
+            .spawn((
+                Mesh2d(mesh),
+                MeshMaterial2d(mat.clone()),
+                Transform::from_xyz(mid.x, mid.y, 20.),
+            ))
+            .observe(|trigger: Trigger<Pointer<Click>>| {
+                println!("Entity {} clicked!", trigger.target());
+            });
     }
 
-    commands.spawn((
-        Sprite {
-            image: assets.mask.clone(),
-            //image_mode: SpriteImageMode::Scale(ScalingMode::FillStart),
-            //custom_size: Some(Vec2::new(1920., 1080.)),
-            ..default()
-        },
-        Transform::from_xyz(0., 0., 10.),
-        MapSceneTag,
-    ));
+    //commands.spawn((
+    //    Sprite {
+    //        image: assets.mask.clone(),
+    //        //image_mode: SpriteImageMode::Scale(ScalingMode::FillStart),
+    //        //custom_size: Some(Vec2::new(1920., 1080.)),
+    //        ..default()
+    //    },
+    //    Transform::from_xyz(0., 0., 10.),
+    //    MapSceneTag,
+    //));
 }
 
 fn process_map(image: &Image) -> (HashMap<String, Rect>, Vec<Vec2>) {
