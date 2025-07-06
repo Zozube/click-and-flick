@@ -97,12 +97,23 @@ fn setup(
         MapSceneTag,
     ));
 
-    let boxes = match images.get_mut(&assets.mask) {
+    let (boxes, points) = match images.get_mut(&assets.mask) {
         Some(image) => process_map(image),
-        None => HashMap::new(),
+        None => (HashMap::new(), Vec::new()),
     };
 
     let mat = materials.add(Color::linear_rgba(0.5, 0.5, 0.33, 0.75));
+    let mat2 = materials.add(Color::linear_rgba(0.75, 0.75, 0.75, 0.85));
+
+    for point in points {
+        println!("{:?}", point);
+        let mesh = meshes.add(Rhombus::new(15., 15.));
+        commands.spawn((
+            Mesh2d(mesh),
+            MeshMaterial2d(mat2.clone()),
+            Transform::from_xyz(point.x, point.y, 21.),
+        ));
+    }
 
     for (color, rect) in boxes {
         println!("{:?}: {:?}", color, rect);
@@ -110,11 +121,6 @@ fn setup(
         let mesh = meshes.add(Rectangle::from_size(size));
         let mid = rect.min.midpoint(rect.max);
         commands.spawn((
-            //Sprite {
-            //    custom_size: Some(rect.max - rect.min),
-            //    anchor: bevy::sprite::Anchor::TopLeft,
-            //    ..default()
-            //},
             Mesh2d(mesh),
             MeshMaterial2d(mat.clone()),
             Transform::from_xyz(mid.x, mid.y, 20.),
@@ -133,8 +139,9 @@ fn setup(
     ));
 }
 
-fn process_map(image: &Image) -> HashMap<String, Rect> {
+fn process_map(image: &Image) -> (HashMap<String, Rect>, Vec<Vec2>) {
     let mut boxes: HashMap<String, URect> = HashMap::new();
+    let mut points: Vec<Vec2> = Vec::new();
 
     let width = image.size().x as u32;
     let height = image.size().y as u32;
@@ -147,6 +154,13 @@ fn process_map(image: &Image) -> HashMap<String, Rect> {
     let x_steps = width / step;
     let y_steps = height / step;
 
+    let flip_y = Vec2 { x: 1., y: -1. };
+
+    let offset = Vec2 {
+        x: half_width as f32,
+        y: half_height as f32,
+    };
+
     for x_step in 0..x_steps {
         for y_step in 0..y_steps {
             // Restore steps to pixels
@@ -156,6 +170,8 @@ fn process_map(image: &Image) -> HashMap<String, Rect> {
                 if clr.alpha() == 1. {
                     let name = clr.hue().to_string();
                     let pos = UVec2 { x, y };
+
+                    points.push((pos.as_vec2() - offset) * flip_y);
 
                     let rect = boxes.entry(name).or_insert(URect { min: pos, max: pos });
 
@@ -174,36 +190,34 @@ fn process_map(image: &Image) -> HashMap<String, Rect> {
         }
     }
 
-    let offset = Vec2 {
-        x: half_width as f32,
-        y: half_height as f32,
-    };
-
     let flip_y = Vec2 { x: 1., y: -1. };
 
-    return boxes
-        .iter()
-        .map(|(k, v)| {
-            (
-                k.clone(),
-                // Bevy sprite coordinates are relative to center by default
-                Rect {
-                    min: (v.min.as_vec2() - offset) * flip_y,
-                    max: (v.max.as_vec2() - offset) * flip_y,
-                },
-            )
-        })
-        .map(|(k, v)| {
-            (
-                k,
-                // And recombind
-                Rect {
-                    min: v.min.with_y(v.max.y),
-                    max: v.max.with_y(v.min.y),
-                },
-            )
-        })
-        .collect();
+    return (
+        boxes
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    // Bevy sprite coordinates are relative to center by default
+                    Rect {
+                        min: (v.min.as_vec2() - offset) * flip_y,
+                        max: (v.max.as_vec2() - offset) * flip_y,
+                    },
+                )
+            })
+            .map(|(k, v)| {
+                (
+                    k,
+                    // And recombind
+                    Rect {
+                        min: v.min.with_y(v.max.y),
+                        max: v.max.with_y(v.min.y),
+                    },
+                )
+            })
+            .collect(),
+        points,
+    );
 }
 
 fn post_load() {}
