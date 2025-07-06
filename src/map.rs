@@ -180,17 +180,21 @@ fn process_map(image: &Image) -> (HashMap<String, Rect>, Vec<Vec2>) {
                         continue;
                     }
 
-                    if pos.cmple(rect.min).all() {
-                        rect.min = pos;
-                    } else if pos.cmpge(rect.max).all() {
-                        rect.max = pos;
+                    if pos.x < rect.min.x {
+                        rect.min.x = pos.x;
+                    } else if pos.x > rect.max.x {
+                        rect.max.x = pos.x;
+                    }
+
+                    if pos.y < rect.min.y {
+                        rect.min.y = pos.y;
+                    } else if pos.y > rect.max.y {
+                        rect.max.y = pos.y;
                     }
                 }
             }
         }
     }
-
-    let flip_y = Vec2 { x: 1., y: -1. };
 
     return (
         boxes
@@ -202,16 +206,6 @@ fn process_map(image: &Image) -> (HashMap<String, Rect>, Vec<Vec2>) {
                     Rect {
                         min: (v.min.as_vec2() - offset) * flip_y,
                         max: (v.max.as_vec2() - offset) * flip_y,
-                    },
-                )
-            })
-            .map(|(k, v)| {
-                (
-                    k,
-                    // And recombind
-                    Rect {
-                        min: v.min.with_y(v.max.y),
-                        max: v.max.with_y(v.min.y),
                     },
                 )
             })
