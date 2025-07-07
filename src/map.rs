@@ -1,6 +1,7 @@
 use crate::states::GameState;
+use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
-use bevy::{app::FixedMain, prelude::*};
+use bevy_asset_loader::prelude::*;
 use bevy_pancam::PanCam;
 use bevy_simple_screen_boxing::CameraBox;
 use std::cmp;
@@ -11,14 +12,16 @@ pub struct MapPlugin;
 #[derive(Component)]
 pub struct MapSceneTag;
 
-#[derive(Resource)]
+#[derive(AssetCollection, Resource)]
 struct SceneAssets {
+    #[asset(path = "private/map.png")]
     map: Handle<Image>,
+    #[asset(path = "private/mask.png")]
     mask: Handle<Image>,
 }
 
 #[derive(States, Default, Clone, Eq, PartialEq, Hash, Debug)]
-enum LoadingStates {
+enum MyLoadingStates {
     #[default]
     Started,
     Ready,
@@ -26,34 +29,14 @@ enum LoadingStates {
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
-        app.init_state::<LoadingStates>()
-            .add_systems(OnEnter(LoadingStates::Started), load)
-            .add_systems(
-                FixedMain,
-                poll_loading.run_if(in_state(LoadingStates::Started)),
+        app.init_state::<MyLoadingStates>()
+            .add_loading_state(
+                LoadingState::new(MyLoadingStates::Started)
+                    .continue_to_state(MyLoadingStates::Ready)
+                    .load_collection::<SceneAssets>(),
             )
-            .add_systems(OnEnter(LoadingStates::Ready), setup)
+            .add_systems(OnEnter(MyLoadingStates::Ready), setup)
             .add_systems(Update, update);
-    }
-}
-
-fn load(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.insert_resource(SceneAssets {
-        map: asset_server.load("private/map.png"),
-        mask: asset_server.load("private/mask.png"),
-    });
-}
-
-fn poll_loading(
-    asset_server: Res<AssetServer>,
-    assets: Res<SceneAssets>,
-    mut next_state: ResMut<NextState<LoadingStates>>,
-) {
-    let map_loaded = asset_server.is_loaded(assets.map.id());
-    let mask_loaded = asset_server.is_loaded(assets.mask.id());
-
-    if map_loaded && mask_loaded {
-        next_state.set(LoadingStates::Ready);
     }
 }
 
@@ -216,7 +199,5 @@ fn process_map(image: &Image) -> (HashMap<String, Rect>, Vec<Vec2>) {
         points,
     );
 }
-
-fn post_load() {}
 
 fn update() {}
