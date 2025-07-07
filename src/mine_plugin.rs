@@ -1,10 +1,12 @@
 use crate::states::{GameLogic, GameState};
+use crate::util::despawn_screen;
 
 use avian3d::prelude::*;
 use bevy::asset::AssetPath;
 use bevy::render::view::RenderLayers;
 use bevy::window::PrimaryWindow;
 use bevy::{audio::Volume, pbr::OpaqueRendererMethod, prelude::*};
+use bevy_simple_screen_boxing::CameraBox;
 use core::time::Duration;
 use rand::Rng;
 use rand::{seq::SliceRandom, thread_rng};
@@ -114,37 +116,49 @@ impl Plugin for MinePlugin {
         )
         .add_systems(
             Update,
-            (mouse_button_input, update, clean_dead).in_set(GameLogic),
-        );
+            (mouse_button_input, update, clean_dead).run_if(in_state(GameState::Mine)),
+        )
+        .add_systems(OnExit(GameState::Mine), despawn_screen::<MineSceneTag>);
     }
 }
 
 fn setup_camera(mut commands: Commands) {
-    //commands.spawn((
-    //    Camera2d,
-    //    Camera {
-    //        order: 0,
-    //        ..default()
-    //    },
-    //    RenderLayers::layer(1),
-    //    Projection::Orthographic(OrthographicProjection {
-    //        //viewport_origin: Vec2::ZERO,
-    //        scaling_mode: bevy::render::camera::ScalingMode::Fixed {
-    //            width: 1920.,
-    //            height: 1080.,
-    //        },
-    //        ..OrthographicProjection::default_2d()
-    //    }),
-    //));
-    //commands.spawn((
-    //    Camera3d::default(),
-    //    Camera {
-    //        order: 1,
-    //        ..default()
-    //    },
-    //    Transform::from_xyz(0., 0., 10.0).looking_at(Vec3::ZERO, Vec3::Y),
-    //    RenderLayers::layer(0),
-    //));
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 0,
+            ..default()
+        },
+        CameraBox::ResolutionIntegerScale {
+            resolution: Vec2::new(1920., 1080.),
+            allow_imperfect_aspect_ratios: true,
+        },
+        RenderLayers::layer(0),
+        Projection::Orthographic(OrthographicProjection {
+            //viewport_origin: Vec2::ZERO,
+            scaling_mode: bevy::render::camera::ScalingMode::Fixed {
+                width: 1920.,
+                height: 1080.,
+            },
+            ..OrthographicProjection::default_2d()
+        }),
+        MineSceneTag,
+    ));
+
+    commands.spawn((
+        Camera3d::default(),
+        Camera {
+            order: 1,
+            ..default()
+        },
+        CameraBox::ResolutionIntegerScale {
+            resolution: Vec2::new(1920., 1080.),
+            allow_imperfect_aspect_ratios: true,
+        },
+        Transform::from_xyz(0., 0., 10.0).looking_at(Vec3::ZERO, Vec3::Y),
+        RenderLayers::layer(1),
+        MineSceneTag,
+    ));
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Ambient>) {

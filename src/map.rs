@@ -1,4 +1,5 @@
 use crate::states::GameState;
+use crate::util::despawn_screen;
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
 use bevy_asset_loader::prelude::*;
@@ -23,6 +24,7 @@ struct SceneAssets {
 #[derive(States, Default, Clone, Eq, PartialEq, Hash, Debug)]
 enum MyLoadingStates {
     #[default]
+    Inactive,
     Started,
     Ready,
 }
@@ -35,8 +37,15 @@ impl Plugin for MapPlugin {
                     .continue_to_state(MyLoadingStates::Ready)
                     .load_collection::<SceneAssets>(),
             )
+            .add_systems(
+                OnEnter(GameState::Map),
+                |mut next_state: ResMut<NextState<MyLoadingStates>>| {
+                    next_state.set(MyLoadingStates::Started)
+                },
+            )
             .add_systems(OnEnter(MyLoadingStates::Ready), setup)
-            .add_systems(Update, update);
+            .add_systems(OnExit(GameState::Map), despawn_screen::<MapSceneTag>)
+            .add_systems(Update, (update,).run_if(in_state(GameState::Map)));
     }
 }
 
@@ -67,6 +76,7 @@ fn setup(
             },
             ..OrthographicProjection::default_2d()
         }),
+        MapSceneTag,
     ));
 
     commands.spawn((
@@ -94,6 +104,7 @@ fn setup(
             Mesh2d(mesh),
             MeshMaterial2d(mat2.clone()),
             Transform::from_xyz(point.x, point.y, 21.),
+            MapSceneTag,
         ));
     }
 
@@ -107,6 +118,7 @@ fn setup(
                 Mesh2d(mesh),
                 MeshMaterial2d(mat.clone()),
                 Transform::from_xyz(mid.x, mid.y, 20.),
+                MapSceneTag,
             ))
             .observe(|trigger: Trigger<Pointer<Click>>| {
                 println!("Entity {} clicked!", trigger.target());

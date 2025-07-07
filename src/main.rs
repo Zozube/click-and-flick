@@ -3,6 +3,7 @@ mod main_menu;
 mod map;
 mod mine_plugin;
 mod states;
+mod util;
 
 use avian3d::prelude::*;
 use bevy::math::AspectRatio;
@@ -39,7 +40,7 @@ fn main() {
                 })
                 .set(ImagePlugin::default_nearest()),
         )
-        .configure_sets(Update, GameLogic)
+        //.configure_sets(Update, GameLogic)
         //.configure_sets(Startup, GameLogic)
         .add_plugins(PanCamPlugin::default())
         .add_plugins(PhysicsPlugins::default())
@@ -50,9 +51,9 @@ fn main() {
         })
         .add_plugins(WorldInspectorPlugin::new())
         .insert_resource(ClearColor(Color::BLACK))
-        //.add_plugins(MinePlugin)
+        .add_plugins(MinePlugin)
         .add_plugins(MapPlugin)
-        .configure_sets(Update, GameLogic.run_if(in_state(GameState::Mine)))
+        //.configure_sets(Update, GameLogic.run_if(in_state(GameState::Mine)))
         .add_systems(
             PreUpdate,
             (|mut mode: ResMut<DebugPickingMode>| {
@@ -74,7 +75,8 @@ fn main() {
                     GameState::Map => GameState::Tavern,
                     GameState::Tavern => GameState::Mine,
                 };
-                next_state.set(new_state);
+                next_state.set(new_state.clone());
+                println!("{:?}", new_state.clone());
             })
             .distributive_run_if(bevy::input::common_conditions::input_just_pressed(
                 KeyCode::Tab,
@@ -97,47 +99,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    //commands.spawn((
-    //    Camera2d,
-    //    Camera {
-    //        order: 0,
-    //        ..default()
-    //    },
-    //    CameraBox::ResolutionIntegerScale {
-    //        resolution: Vec2::new(1920., 1080.),
-    //        allow_imperfect_aspect_ratios: true,
-    //    },
-    //    RenderLayers::layer(0),
-    //    Projection::Orthographic(OrthographicProjection {
-    //        //viewport_origin: Vec2::ZERO,
-    //        scaling_mode: bevy::render::camera::ScalingMode::Fixed {
-    //            width: 1920.,
-    //            height: 1080.,
-    //        },
-    //        ..OrthographicProjection::default_2d()
-    //    }),
-    //));
-
-    commands.spawn((
-        Camera3d::default(),
-        Camera {
-            order: 1,
-            ..default()
-        },
-        CameraBox::ResolutionIntegerScale {
-            resolution: Vec2::new(1920., 1080.),
-            allow_imperfect_aspect_ratios: true,
-        },
-        Transform::from_xyz(0., 0., 10.0).looking_at(Vec3::ZERO, Vec3::Y),
-        RenderLayers::layer(1),
-    ));
-
-    //commands.spawn((
-    //    Sprite::from_image(asset_server.load("private/rock-layer0.png")),
-    //    Transform::from_xyz(-200., 0., 100.).with_scale(Vec3::splat(0.33)),
-    //));
-}
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {}
 
 fn parse_aspect_ratio(ratio: &str) -> Result<AspectRatio, Box<dyn Error>> {
     let mut splits = ratio.split(":");
