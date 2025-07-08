@@ -79,16 +79,20 @@ fn setup(
         MapSceneTag,
     ));
 
-    commands.spawn((
-        Sprite {
-            image: assets.map.clone(),
-            //image_mode: SpriteImageMode::Scale(ScalingMode::FillStart),
-            //custom_size: Some(Vec2::new(1920., 1080.)),
-            ..default()
-        },
-        Transform::from_xyz(0., 0., 1.),
-        MapSceneTag,
-    ));
+    commands
+        .spawn((
+            Sprite {
+                image: assets.map.clone(),
+                //image_mode: SpriteImageMode::Scale(ScalingMode::FillStart),
+                //custom_size: Some(Vec2::new(1920., 1080.)),
+                ..default()
+            },
+            Transform::from_xyz(0., 0., 1.),
+            MapSceneTag,
+        ))
+        .observe(|trigger: Trigger<Pointer<Click>>| {
+            println!("Entity {} clicked!", trigger.target());
+        });
 
     let (boxes, points) = match images.get_mut(&assets.mask) {
         Some(image) => process_map(image),

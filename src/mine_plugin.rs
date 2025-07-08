@@ -1,10 +1,9 @@
-use crate::states::{GameLogic, GameState};
+use crate::states::GameState;
 use crate::util::despawn_screen;
 
 use avian3d::prelude::*;
 use bevy::asset::AssetPath;
 use bevy::render::view::RenderLayers;
-use bevy::window::PrimaryWindow;
 use bevy::{audio::Volume, pbr::OpaqueRendererMethod, prelude::*};
 use bevy_simple_screen_boxing::CameraBox;
 use core::time::Duration;
@@ -116,7 +115,7 @@ impl Plugin for MinePlugin {
         )
         .add_systems(
             Update,
-            (mouse_button_input, update, clean_dead).run_if(in_state(GameState::Mine)),
+            (/*mouse_button_input, */ update, clean_dead).run_if(in_state(GameState::Mine)),
         )
         .add_systems(OnExit(GameState::Mine), despawn_screen::<MineSceneTag>);
     }
@@ -170,7 +169,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
             custom_size: Some(Vec2::new(1920., 1080.)),
             ..default()
         },
+        Name::new("Background"),
         Transform::from_xyz(0., 0., 1.),
+        Pickable::default(),
         BackgroundImg,
         MineSceneTag,
     ));
@@ -183,43 +184,55 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
 
     let [rock1, rock2, rock3, rock4] = rock_layers;
 
-    commands.spawn((
-        Sprite::from_image(rock1),
-        OriginalTransform(Transform::from_xyz(120., 50., 1.).with_scale(Vec3::splat(0.75))),
-        Rock,
-        Bouncer::default(),
-        MineSceneTag,
-    ));
+    commands
+        .spawn((
+            Sprite::from_image(rock1),
+            OriginalTransform(Transform::from_xyz(120., 50., 2.).with_scale(Vec3::splat(0.75))),
+            Rock,
+            Bouncer::default(),
+            Pickable::default(),
+            MineSceneTag,
+        ))
+        .observe(rock_click);
 
-    commands.spawn((
-        Sprite::from_image(rock2),
-        OriginalTransform(Transform::from_xyz(100., -50., 1.).with_scale(Vec3::splat(0.75))),
-        Rock,
-        Bouncer::default(),
-        MineSceneTag,
-    ));
+    commands
+        .spawn((
+            Sprite::from_image(rock2),
+            OriginalTransform(Transform::from_xyz(100., -50., 3.).with_scale(Vec3::splat(0.75))),
+            Rock,
+            Bouncer::default(),
+            Pickable::default(),
+            MineSceneTag,
+        ))
+        .observe(rock_click);
 
-    commands.spawn((
-        Sprite::from_image(rock3),
-        OriginalTransform(Transform::from_xyz(-150., 0., 1.1).with_scale(Vec3::splat(0.75))),
-        Rock,
-        Bouncer::default(),
-        MineSceneTag,
-    ));
+    commands
+        .spawn((
+            Sprite::from_image(rock3),
+            OriginalTransform(Transform::from_xyz(-150., 0., 4.).with_scale(Vec3::splat(0.75))),
+            Rock,
+            Bouncer::default(),
+            Pickable::default(),
+            MineSceneTag,
+        ))
+        .observe(rock_click);
 
-    commands.spawn((
-        Sprite {
-            image: rock4,
-            //anchor: bevy::sprite::Anchor::TopLeft,
-            ..default()
-        },
-        OriginalTransform(
-            Transform::from_xyz(-1920. / 2. + 100., 0., 1.).with_scale(Vec3::splat(0.745)),
-        ),
-        Rock,
-        Bouncer::default(),
-        MineSceneTag,
-    ));
+    commands
+        .spawn((
+            Sprite {
+                image: rock4,
+                //anchor: bevy::sprite::Anchor::TopLeft,
+                ..default()
+            },
+            OriginalTransform(
+                Transform::from_xyz(-1920. / 2. + 100., 0., 5.).with_scale(Vec3::splat(0.745)),
+            ),
+            Rock,
+            Bouncer::default(),
+            Pickable::default(),
+            MineSceneTag,
+        ))
+        .observe(rock_click);
 
     commands.spawn((
         AudioPlayer::new(sample.0.clone()),
@@ -230,6 +243,31 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
         },
         MineSceneTag,
     ));
+}
+
+fn rock_click(
+    trigger: Trigger<Pointer<Click>>,
+    mut entities: Query<(&mut Bouncer, &mut Health)>,
+    mut commands: Commands,
+    samples: Res<AudioSamples>,
+) {
+    let entity = entities.get_mut(trigger.target());
+    if entity.is_ok() {
+        let entity = entity.unwrap();
+        let (mut bouncer, mut health) = entity;
+        bouncer.bounce();
+        health.hit(34.);
+        let sample = samples.samples.choose(&mut thread_rng()).unwrap();
+        commands.spawn((
+            AudioPlayer::new(sample.clone()),
+            PlaybackSettings {
+                mode: bevy::audio::PlaybackMode::Despawn,
+                volume: Volume::Linear(1.0),
+                ..default()
+            },
+            MineSceneTag,
+        ));
+    }
 }
 
 fn load_audio(asset_server: Res<AssetServer>, mut commands: Commands) {
@@ -325,68 +363,6 @@ fn spawn_coins(
                 RenderLayers::layer(1),
                 MineSceneTag,
             ));
-        }
-    }
-}
-
-fn mouse_button_input(
-    buttons: Res<ButtonInput<MouseButton>>,
-    q_window: Query<&Window, With<PrimaryWindow>>,
-    q_camera: Query<(&Camera, &GlobalTransform), (With<Camera2d>, With<RenderLayers>)>,
-    //mut bouncer_q: Query<&mut Bouncer>,
-    mut commands: Commands,
-    q_rocks: Query<(&Transform, &Sprite, &mut Bouncer, &mut Health), With<Rock>>,
-    images: Res<Assets<Image>>,
-    samples: Res<AudioSamples>,
-) {
-    for (transform, sprite, mut bouncer, mut health) in q_rocks {
-        if let Some(texture) = images.get(sprite.image.id()) {
-            let texture_size = texture.size();
-            let scale = transform.scale.truncate();
-            let size = texture_size.as_vec2() * scale;
-            //println!("{:?}", size);
-            let half_size = size * 0.5;
-            let pos = transform.translation.truncate();
-
-            let min = pos - half_size;
-            let max = pos + half_size;
-
-            //println!("{:?}", size);
-
-            if buttons.just_pressed(MouseButton::Left) {
-                let window = q_window.single().expect("Window must exist");
-                let (camera, camera_transform) = q_camera.single().expect("More than one camera");
-
-                if let Some(cursor) = window.cursor_position() {
-                    match camera.viewport_to_world(camera_transform, cursor) {
-                        Ok(ray) => {
-                            let world_position = ray.origin.truncate();
-                            if (world_position.x >= min.x && world_position.x <= max.x)
-                                && (world_position.y >= min.y && world_position.y <= max.y)
-                            {
-                                bouncer.bounce();
-                                health.hit(34.);
-                                let sample = samples.samples.choose(&mut thread_rng()).unwrap();
-                                commands.spawn((
-                                    AudioPlayer::new(sample.clone()),
-                                    PlaybackSettings {
-                                        mode: bevy::audio::PlaybackMode::Despawn,
-                                        volume: Volume::Linear(1.0),
-                                        ..default()
-                                    },
-                                    MineSceneTag,
-                                ));
-                                println!("Cursor over sprite at {:?}", transform.translation);
-                                return;
-                            }
-                            println!("World coords: {}/{}", world_position.x, world_position.y);
-                        }
-                        Err(err) => {
-                            eprintln!("Error converting cursor to world ray: {:?}", err);
-                        }
-                    }
-                }
-            }
         }
     }
 }
