@@ -1,5 +1,6 @@
 use crate::states::GameState;
 use crate::util::despawn_screen;
+use bevy_asset_loader::prelude::*;
 
 use avian3d::prelude::*;
 use bevy::asset::AssetPath;
@@ -10,6 +11,50 @@ use core::time::Duration;
 use rand::Rng;
 use rand::{seq::SliceRandom, thread_rng};
 use std::ops::{Deref, DerefMut};
+
+#[derive(AssetCollection, Resource)]
+struct SceneAssets {
+    #[asset(path = "private/cave-blue.png")]
+    background: Handle<Image>,
+
+    #[asset(path = "private/non-commercial/ambient/music.ogg")]
+    ambient: Handle<AudioSource>,
+
+    #[asset(path = "private/money-spill-2.ogg")]
+    money_spill: Handle<AudioSource>,
+
+    #[asset(
+        paths(
+            "private/non-commercial/punch/1.ogg",
+            "private/non-commercial/punch/2.ogg",
+            "private/non-commercial/punch/3.ogg",
+            "private/non-commercial/punch/4.ogg",
+            "private/non-commercial/punch/5.ogg",
+            "private/non-commercial/punch/6.ogg",
+        ),
+        collection(typed)
+    )]
+    hits: Vec<Handle<AudioSource>>,
+
+    #[asset(
+        paths(
+            "private/rock-layer0.png",
+            "private/rock-layer1.png",
+            "private/rock-layer2.png",
+            "private/rock-layer3.png",
+        ),
+        collection(typed)
+    )]
+    rocks: Vec<Handle<Image>>,
+}
+
+#[derive(States, Default, Clone, Eq, PartialEq, Hash, Debug)]
+enum MyLoadingStates {
+    #[default]
+    Inactive,
+    Started,
+    Ready,
+}
 
 #[derive(Component)]
 struct MineSceneTag;
@@ -53,12 +98,6 @@ pub struct Rock;
 struct AudioSamples {
     samples: Vec<Handle<AudioSource>>,
 }
-
-#[derive(Resource)]
-struct Ambient(Handle<AudioSource>);
-
-#[derive(Resource)]
-struct MoneySpill(Handle<AudioSource>);
 
 #[derive(Component, Default)]
 pub struct Bouncer {
@@ -109,15 +148,28 @@ pub struct MinePlugin;
 
 impl Plugin for MinePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            OnEnter(GameState::Mine),
-            (load_audio, (setup, setup_camera, load_gltf)).chain(),
-        )
-        .add_systems(
-            Update,
-            (/*mouse_button_input, */ update, clean_dead).run_if(in_state(GameState::Mine)),
-        )
-        .add_systems(OnExit(GameState::Mine), despawn_screen::<MineSceneTag>);
+        app.init_state::<MyLoadingStates>()
+            .add_loading_state(
+                LoadingState::new(MyLoadingStates::Started)
+                    .continue_to_state(MyLoadingStates::Ready)
+                    .load_collection::<SceneAssets>(),
+            )
+            .add_systems(
+                OnEnter(GameState::Mine),
+                |mut next_state: ResMut<NextState<MyLoadingStates>>| {
+                    next_state.set(MyLoadingStates::Started)
+                },
+            )
+            .add_systems(
+                OnEnter(MyLoadingStates::Ready),
+                (setup, setup_camera, load_gltf),
+            )
+            .add_systems(
+                Update,
+                (/*mouse_button_input, */ update, clean_dead)
+                    .run_if(in_state(GameState::Mine).and(in_state(MyLoadingStates::Ready))),
+            )
+            .add_systems(OnExit(GameState::Mine), despawn_screen::<MineSceneTag>);
     }
 }
 
@@ -160,11 +212,10 @@ fn setup_camera(mut commands: Commands) {
     ));
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Ambient>) {
-    let bg = asset_server.load("private/cave-blue.png");
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, assets: Res<SceneAssets>) {
     commands.spawn((
         Sprite {
-            image: bg,
+            image: assets.background.clone(),
             //image_mode: SpriteImageMode::Scale(ScalingMode::FillStart),
             custom_size: Some(Vec2::new(1920., 1080.)),
             ..default()
@@ -176,13 +227,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
         MineSceneTag,
     ));
 
-    let rock_layers: [Handle<Image>; 4] = (0..=3)
-        .map(|i| asset_server.load(format!("private/rock-layer{}.png", i)))
+    let [rock1, rock2, rock3, rock4]: [Handle<Image>; 4] = (0..4)
+        .map(|i| assets.rocks.get(i).unwrap().clone())
         .collect::<Vec<_>>()
         .try_into()
-        .expect("Expectd exactly 4 rock layers");
-
-    let [rock1, rock2, rock3, rock4] = rock_layers;
+        .unwrap();
 
     commands
         .spawn((
@@ -235,7 +284,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sample: Res<Amb
         .observe(rock_click);
 
     commands.spawn((
-        AudioPlayer::new(sample.0.clone()),
+        AudioPlayer::new(assets.ambient.clone()),
         PlaybackSettings {
             mode: bevy::audio::PlaybackMode::Loop,
             volume: Volume::Linear(0.75),
@@ -249,7 +298,7 @@ fn rock_click(
     trigger: Trigger<Pointer<Click>>,
     mut entities: Query<(&mut Bouncer, &mut Health)>,
     mut commands: Commands,
-    samples: Res<AudioSamples>,
+    assets: Res<SceneAssets>,
 ) {
     let entity = entities.get_mut(trigger.target());
     if entity.is_ok() {
@@ -257,7 +306,7 @@ fn rock_click(
         let (mut bouncer, mut health) = entity;
         bouncer.bounce();
         health.hit(34.);
-        let sample = samples.samples.choose(&mut thread_rng()).unwrap();
+        let sample = assets.hits.choose(&mut thread_rng()).unwrap();
         commands.spawn((
             AudioPlayer::new(sample.clone()),
             PlaybackSettings {
@@ -268,18 +317,6 @@ fn rock_click(
             MineSceneTag,
         ));
     }
-}
-
-fn load_audio(asset_server: Res<AssetServer>, mut commands: Commands) {
-    let samples: Vec<Handle<AudioSource>> = (1..=6)
-        .map(|i| asset_server.load(format!("private/non-commercial/punch/{}.ogg", i)))
-        .collect();
-
-    commands.insert_resource(Ambient(
-        asset_server.load("private/non-commercial/ambient/music.ogg"),
-    ));
-    commands.insert_resource(MoneySpill(asset_server.load("private/money-spill-2.ogg")));
-    commands.insert_resource(AudioSamples { samples });
 }
 
 fn load_gltf(
@@ -387,7 +424,7 @@ fn clean_dead(
     q: Query<(Entity, &Health, &Transform)>,
     asset_server: Res<AssetServer>,
     materials: Res<MyMaterials>,
-    money_spill: Res<MoneySpill>,
+    assets: Res<SceneAssets>,
 ) {
     for (entity, hp, tr) in q.iter() {
         if hp.0 < 0. {
@@ -398,7 +435,7 @@ fn clean_dead(
                 tr.translation.truncate(),
             );
             commands.spawn((
-                AudioPlayer::new(money_spill.0.clone()),
+                AudioPlayer::new(assets.money_spill.clone()),
                 PlaybackSettings {
                     mode: bevy::audio::PlaybackMode::Despawn,
                     volume: Volume::Linear(0.75),
