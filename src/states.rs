@@ -14,11 +14,23 @@ impl Default for AppState {
     }
 }
 
-#[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(States, Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GameState {
     Mine,
     Tavern,
     Map,
+}
+
+#[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
+/**
+For animation of fade in / fade out between scene changes
+*/
+pub enum SceneTransitionState {
+    #[default]
+    Normal,
+    FadeOut,
+    Black,
+    FadeIn,
 }
 
 impl Default for GameState {

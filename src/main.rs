@@ -2,32 +2,23 @@
 mod main_menu;
 mod map;
 mod mine_plugin;
+mod scene_change_plugin;
 mod states;
 mod util;
 
 use avian3d::prelude::*;
-use bevy::math::AspectRatio;
 use bevy::prelude::*;
-use bevy::render::view::RenderLayers;
 use bevy_pancam::PanCamPlugin;
-use bevy_simple_screen_boxing::CameraBox;
 use bevy_simple_screen_boxing::CameraBoxingPlugin;
-use states::GameLogic;
-use std::error::Error;
 
 use bevy::dev_tools::picking_debug::{DebugPickingMode, DebugPickingPlugin};
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use scene_change_plugin::SceneChangePlugin;
 
 use crate::map::MapPlugin;
 use crate::mine_plugin::MinePlugin;
 use crate::states::{AppState, GameState};
-
-#[derive(Resource, Debug, Clone)]
-pub struct Letterbox {
-    pub viewport: bevy::render::camera::Viewport,
-    pub region: Rect,
-}
 
 fn main() {
     App::new()
@@ -53,6 +44,7 @@ fn main() {
         .insert_resource(ClearColor(Color::BLACK))
         .add_plugins(MinePlugin)
         .add_plugins(MapPlugin)
+        .add_plugins(SceneChangePlugin)
         //.configure_sets(Update, GameLogic.run_if(in_state(GameState::Mine)))
         .add_systems(
             PreUpdate,
@@ -67,126 +59,28 @@ fn main() {
                 KeyCode::F3,
             )),
         )
-        .add_systems(
-            PreUpdate,
-            (|state: Res<State<GameState>>, mut next_state: ResMut<NextState<GameState>>| {
-                let new_state = match state.get() {
-                    GameState::Mine => GameState::Map,
-                    GameState::Map => GameState::Tavern,
-                    GameState::Tavern => GameState::Mine,
-                };
-                next_state.set(new_state.clone());
-                println!("{:?}", new_state.clone());
-            })
-            .distributive_run_if(bevy::input::common_conditions::input_just_pressed(
-                KeyCode::Tab,
-            )),
-        )
         // States
         .init_state::<GameState>()
         .init_state::<AppState>()
-        .insert_resource(Letterbox {
-            region: Rect::EMPTY,
-            viewport: bevy::render::camera::Viewport { ..default() },
-        })
         .add_systems(
             Update,
             (
                 /* gizmos, */ boxes, /*upd_letterbox.run_if(on_event::<WindowResized>)*/
             ),
         )
-        .add_systems(Startup, (/*upd_letterbox, */setup))
         .run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {}
-
-fn parse_aspect_ratio(ratio: &str) -> Result<AspectRatio, Box<dyn Error>> {
-    let mut splits = ratio.split(":");
-    let format_err = "Must be 2 numbers formatted as x:y";
-    let x = splits.next().ok_or(format_err)?.trim().parse::<f32>()?;
-    let y = splits.next().ok_or(format_err)?.trim().parse::<f32>()?;
-    return AspectRatio::try_new(x, y).map_err(|e| Box::new(e) as Box<dyn Error>);
-}
-
-fn get_common_aspect_ratio(target: &AspectRatio, other: &[&AspectRatio]) -> f32 {
-    let ar = target.ratio();
-    let (min_ar, max_ar) = other
-        .iter()
-        .map(|d| d.ratio())
-        .fold(None, |acc, val| match acc {
-            None => Some((val, val)),
-            Some((min, max)) => Some((min.min(val), max.max(val))),
-        })
-        .unwrap();
-    ar
-}
-
-fn calculate_letterbox(window: &Window) -> Letterbox {
-    let ww = window.width();
-    let wh = window.height();
-    let wr = ww / wh;
-
-    let primary_ar = parse_aspect_ratio("16:9").unwrap();
-    let min_ar = parse_aspect_ratio("16:10").unwrap();
-    let max_ar = parse_aspect_ratio("20:9").unwrap();
-
-    let min_r = min_ar.ratio();
-    let max_r = max_ar.ratio();
-
-    //let pr = min_r * max_r;
-    let pr = primary_ar.ratio();
-
-    let size = if wr > pr {
-        Vec2 { x: wh * pr, y: wh }
-    } else {
-        Vec2 { x: ww, y: ww / pr }
-    };
-
-    // ViewPort
-    let vp_left = ((ww - size.x) / 2.0).round() as u32;
-    let vp_bottom = ((wh - size.y) / 2.0).round() as u32;
-
-    Letterbox {
-        region: Rect {
-            min: Vec2 {
-                x: -size.x / ww,
-                y: -size.y / wh,
-            },
-            max: Vec2 {
-                x: size.x / ww,
-                y: size.y / wh,
-            },
-        },
-        viewport: bevy::render::camera::Viewport {
-            physical_position: UVec2::new(vp_left, vp_bottom),
-            physical_size: UVec2::new(size.x.round() as u32, size.y.round() as u32),
-            depth: 0.0..1.0,
-        },
-    }
-}
-
-fn upd_letterbox(
-    windows: Query<&Window>,
-    mut letterbox: ResMut<Letterbox>,
-    mut cameras: Query<&mut Camera>,
+fn boxes(
+    mut gizmo: Gizmos,
+    q_sprite: Query<(&Sprite, &Transform)>,
+    images: Res<Assets<Image>>,
+    debug_mode: Res<DebugPickingMode>,
 ) {
-    let window = windows.single().expect("Multiple windows present");
-    let lb = calculate_letterbox(window);
-    letterbox.viewport = lb.viewport.clone();
-    letterbox.region = lb.region;
-
-    for mut camera in cameras.iter_mut() {
-        camera.viewport = Some(lb.viewport.clone());
-        //println!("{:?}", camera)
+    if *debug_mode == DebugPickingMode::Disabled {
+        return;
     }
 
-    //for mut bg in backgrounds.iter_mut() {
-    //    bg.custom_size = Some(lb.viewport.physical_size.as_vec2());
-    //}
-}
-
-fn boxes(mut gizmo: Gizmos, q_sprite: Query<(&Sprite, &Transform)>, images: Res<Assets<Image>>) {
     for (sprite, transform) in q_sprite.iter() {
         if let Some(texture) = images.get(sprite.image.id()) {
             let texture_size = texture.size();
